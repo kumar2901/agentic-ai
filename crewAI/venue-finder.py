@@ -23,17 +23,15 @@ with env_file.open('r', encoding='utf-8') as f:
         value = value.strip().strip('"').strip("'")
         os.environ.setdefault(key, value)
 
-if not os.environ.get('OPENAI_API_KEY'):
-    raise RuntimeError('OPENAI_API_KEY is not set. Add it to the .env file.')
-if not os.environ.get('SERPER_API_KEY'):
-    raise RuntimeError('SERPER_API_KEY is not set. Add it to the .env file.')
+from crewai import Agent, Task, Crew, LLM
 
-from crewai import Agent, Task, Crew
-from crewai_tools import SerperDevTool
-
-# Create a search tool
-search_tool = SerperDevTool()
-
+# Configure LLM - use Ollama local server
+# Ollama speaks an OpenAI-compatible API, so we use the ollama provider string.
+llm = LLM(
+    model="ollama/llama2:latest",
+    base_url="http://localhost:11434",
+    api_key="testapikey"
+)
 
 venue_finder_agent = Agent(
     name="Venue Finder Agent",
@@ -44,7 +42,7 @@ venue_finder_agent = Agent(
         "Your expertise ensures that all conference requirements are met efficiently. "
         "Your goal is to provide the client with the best possible venue options."
     ),
-    tools=[search_tool],
+    llm=llm,
     verbose=True
 )
 
@@ -59,7 +57,7 @@ venue_quality_assurance_agent = Agent(
         "Your goal is to ensure that the selected venue meets all the necessary quality standards and provides an exceptional experience for conference attendees. "
         "Your job is to thoroughly evaluate potential venues and provide detailed feedback on their suitability for the conference, ensuring that the final selection is of the highest quality."
     ),
-    tools=[search_tool],
+    llm=llm,
     verbose=True
 )
 
@@ -76,7 +74,6 @@ venue_finding_task = Task(
         "A comprehensive list of top 5 potential venues, each with a detailed report outlining their locations, amenities, capacities, and pricing. "
         "The report should also include a thorough evaluation of each venue based on the specified criteria, along with recommendations for the best venue choice."
     ),
-    tools=[search_tool],
     agent=venue_finder_agent
 )
 
@@ -93,7 +90,6 @@ quality_assurance_task = Task(
         "A detailed review of top 5 potential venues provided by the Venue Finder Agent, including an assessment of their quality based on the specified criteria. "
         "The report should include a comprehensive evaluation of each venue, highlighting their strengths and weaknesses, and provide a clear recommendation for the best venue choice based on the overall quality assessment."
     ),
-    tools=[search_tool],
     agent=venue_quality_assurance_agent
 )
 
@@ -108,11 +104,40 @@ venue_finding_planning_crew = Crew(
 
 # Run the Crew
 input_data = {
-    "conference_name": "Tech Innovators Conference 2024",
+    "conference_name": "Tech Innovators Conference 2026",
     "conference_date": (datetime.datetime.now().date() + datetime.timedelta(days=7)).isoformat(), # Set the conference date to 7 days from now
     "required_amenities": ["Wi-Fi", "Projector", "Catering Services", "Parking"],
     "expected_attendees": 200,
+    "location_preference": "Mumbai, India",
     "budget": 5000
 }
+
+# Extract location for dynamic task descriptions
+location = input_data.get("location_preference", "")
+
+# Update task descriptions with the location
+if location:
+    venue_finding_task.description = (
+        f"Conduct a thorough search to find the best venue for the upcoming conference in {location}, ensuring it meets all necessary requirements and quality standards. "
+        f"The venue MUST be located in {location}. Consider factors such as location, amenities, capacity, pricing, and overall suitability for the conference. "
+        "Provide a detailed report on the top venue options and their respective evaluations. "
+        f"Use online resources, reviews, and any other relevant information to make informed decisions about the best venues for the conference in {location}."
+    )
+    venue_finding_task.expected_output = (
+        f"A comprehensive list of top 5 potential venues in {location}, each with a detailed report outlining their locations, amenities, capacities, and pricing. "
+        "The report should also include a thorough evaluation of each venue based on the specified criteria, along with recommendations for the best venue choice. "
+        f"ALL venues must be located in {location}."
+    )
+    
+    quality_assurance_task.description = (
+        f"Review the venue options in {location} provided by the Venue Finder Agent and ensure they meet all necessary quality standards for the conference. "
+        f"ALL venues must be located in {location}. Evaluate each venue based on factors such as location, amenities, capacity, pricing, and overall suitability for the conference. "
+        "Provide a detailed report on the quality of each venue and make recommendations for the best venue choice based on the evaluations."
+    )
+    quality_assurance_task.expected_output = (
+        f"A detailed review of top 5 potential venues in {location} provided by the Venue Finder Agent, including an assessment of their quality based on the specified criteria. "
+        "The report should include a comprehensive evaluation of each venue, highlighting their strengths and weaknesses, and provide a clear recommendation for the best venue choice. "
+        f"Confirm that ALL venues are located in {location}."
+    )
 
 venue_finding_planning_crew.kickoff(input_data)
