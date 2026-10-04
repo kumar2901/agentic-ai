@@ -1,0 +1,6 @@
+langchain_classic==1.0.8
+langchain_huggingface==1.2.2
+langchain_openai==1.6.7
+PyPDF2==3.0.1
+python-dotenv==1.2.4
+streamlit==1.65.0
