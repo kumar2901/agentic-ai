@@ -45,13 +45,20 @@ prompt_template = PromptTemplate(
 )
 
 #fill the prompt template with user inputs
-user_input=prompt_template.invoke({"paper_input": paper_input, "style_input": style_input, "length_input": length_input})
+#user_input=prompt_template.invoke({"paper_input": paper_input, "style_input": style_input, "length_input": length_input})
 
+#
+#if st.button("Submit"):
+    
+ #   if user_input:
+ #       chain=prompt_template | model
+ #       response = chain.invoke(user_input)
+ #       st.write(response.content)
+ #  else:
+ #       st.write("Please enter a prompt before submitting.")
 
+#using langhain to fill the prompt template with user inputs and get the response from the model
 if st.button("Submit"):
-    if user_input:
-        response = model.invoke(user_input)
-        st.write(response.content)
-    else:
-        st.write("Please enter a prompt before submitting.")
-
+    chain = prompt_template | model # create chain by combining the prompt template and the model
+    response = chain.invoke({"paper_input": paper_input, "style_input": style_input, "length_input": length_input})
+    st.write(response.content)
