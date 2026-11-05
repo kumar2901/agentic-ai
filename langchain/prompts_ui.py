@@ -3,15 +3,26 @@ import streamlit as st
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from pydantic import BaseModel, Field
 
 # Load variables from the .env file into the system environment
 load_dotenv()
+
+class ResearchPaperInput(BaseModel):
+    title: str = Field(..., description="The title of the research paper to summarize.")
+    key_ideas: str = Field(..., description="The key ideas or concepts from the research paper.")
+    equations: list[str] = Field(..., description="Any relevant mathematical equations from the research paper in latex format.")
+    analogy: str = Field(..., description="A simple analogy to explain the research paper's concepts in a relatable way.")
+    difficulty_level: int = Field(le=5, ge=1, description="The difficulty level 1 (easy) to 5 (very difficult) of the research paper and 3 (medium) by default.")
+    
 
 model = ChatOpenAI(
     base_url="http://localhost:11434/v1",
     api_key=os.getenv("OLLAMA_API_KEY", "ollama"),  # Placeholder key required by Ollama client
     model="mistral:latest"
 )
+
+structured_model=model.with_structured_output(ResearchPaperInput)
 
 # Initialize session state variables
 if "chat_history" not in st.session_state:
@@ -79,25 +90,27 @@ prompt = ChatPromptTemplate.from_messages([
     ),
 ])
 
+chain = prompt | structured_model
+
 # Submit handling
 if st.button("Submit"):
     with st.spinner("Thinking..."):
         try:
-            chain = prompt | model
             inputs = {
                 "paper_input": paper_input,
                 "style_input": style_input,
                 "length_input": length_input,
                 "chat_history": st.session_state.chat_history
             }
-            response = chain.invoke(inputs)
+            response: ResearchPaperInput = chain.invoke(inputs)
+           
             
             # Store the output in session_state before rerunning
-            st.session_state.latest_response = response.content
+            st.session_state.latest_response = response.model_dump()
             
             # Store standard role tuples
             st.session_state.chat_history.append(("user", f"Paper: {paper_input}, Style: {style_input}, Length: {length_input}"))
-            st.session_state.chat_history.append(("ai", response.content))
+            st.session_state.chat_history.append(("ai", response.model_dump_json(indent=2)))
             
             st.rerun()   
         except Exception as e:
