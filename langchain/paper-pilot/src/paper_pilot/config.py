@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import SecretStr
@@ -23,6 +24,11 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434/v1"
     hugging_face_api_key: SecretStr | None = None
     groq_api_key: SecretStr | None = None
+    papera_dir: Path = Path("data/papers")
+    chroma_dir: Path = Path("data/chroma")
+    chunk_size: int = 800
+    chunk_overlap: int = 100
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 @lru_cache
