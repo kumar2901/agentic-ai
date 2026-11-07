@@ -43,3 +43,11 @@ def _require(secret: SecretStr | None, name: str) -> str:
     if secret is None:
         raise ValueError(f"{name} must be set in the environment.")
     return secret.get_secret_value()
+
+
+def get_fallback_model(settings: Settings | None = None) -> ChatOpenAI | None:
+    """Build a fallback model based on the settings."""
+    s = settings or get_settings()
+    if not s.llm_fallback_model:
+        return None
+    return get_model(s.model_copy(update={"llm_model": s.llm_fallback_model}))

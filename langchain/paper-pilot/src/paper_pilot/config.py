@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     llm_provider: Provider = "ollama"
     llm_model: str | None = None
+    llm_fallback_model: str | None = None
     llm_temperature: float = 0.2
     llm_timeout_seconds: float = 60
     model_api_key: SecretStr | None = None

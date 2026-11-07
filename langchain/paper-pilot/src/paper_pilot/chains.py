@@ -1,6 +1,9 @@
+from typing import Any
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import Runnable, RunnableParallel
+from pydantic import BaseModel
 
 from paper_pilot.schemas import Keywords, PaperSummary
 
@@ -31,21 +34,43 @@ keyword_template = ChatPromptTemplate(
 )
 
 
-def build_summary_chain(model: BaseChatModel) -> Runnable:
+def _structured(
+    model: BaseChatModel,
+    schema: type[BaseModel],
+    fallback: BaseChatModel | None,
+) -> Runnable[Any, Any]:
+    """Return a runnable that uses the model to produce structured output based on the schema."""
+
+    primary = model.with_structured_output(schema).with_retry(stop_after_attempt=3)
+
+    if fallback is None:
+        return primary
+
+    backup = fallback.with_structured_output(schema).with_retry(stop_after_attempt=3)
+
+    return primary.with_fallbacks([backup])
+
+
+def build_summary_chain(
+    model: BaseChatModel, fallback: BaseChatModel | None = None
+) -> Runnable[dict[str, Any], Any]:
     """Build a chain to summarise research papers."""
-    return prompt_template | model.with_structured_output(PaperSummary)
+    return prompt_template | _structured(model, PaperSummary, fallback)
 
 
-def build_keyword_chain(model: BaseChatModel) -> Runnable:
+def build_keyword_chain(
+    model: BaseChatModel, fallback: BaseChatModel | None = None
+) -> Runnable[dict[str, Any], Any]:
     """Build a chain to extract keywords from research papers."""
-    return keyword_template | model.with_structured_output(Keywords)
+    return keyword_template | _structured(model, Keywords, fallback)
 
 
 # parallel chain to summarise and extract keywords
 def build_summary_and_keyword_chain(
     model: BaseChatModel,
-) -> Runnable:
+    fallback: BaseChatModel | None = None,
+) -> Runnable[dict[str, Any], dict[str, Any]]:
     """Build a chain to summarise research papers and extract keywords in parallel."""
-    summary_chain = build_summary_chain(model)
-    keyword_chain = build_keyword_chain(model)
+    summary_chain = build_summary_chain(model, fallback)
+    keyword_chain = build_keyword_chain(model, fallback)
     return RunnableParallel(summary=summary_chain, keywords=keyword_chain)
