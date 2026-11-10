@@ -1,11 +1,13 @@
 from typing import Any
 
+from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import Runnable, RunnableParallel
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.runnables import Runnable, RunnableParallel, RunnablePassthrough
 from pydantic import BaseModel
 
-from paper_pilot.schemas import Keywords, PaperSummary
+from paper_pilot.schemas import Keywords, PaperSummary, RagAnswer
 
 prompt_template = ChatPromptTemplate(
     [
@@ -74,3 +76,42 @@ def build_summary_and_keyword_chain(
     summary_chain = build_summary_chain(model, fallback)
     keyword_chain = build_keyword_chain(model, fallback)
     return RunnableParallel(summary=summary_chain, keywords=keyword_chain)
+
+
+rag_prompt = ChatPromptTemplate(
+    [
+        (
+            "system",
+            (
+                "You answer questions about research papers using ONLY the context provided. "
+                "Each context block starts with a label like [Paper Title, p.7]. "
+                "List every paper and page you used in `sources`. "
+                'If the context does not contains the answer, reply "I don\'t know" with empty '
+                "sources.  Never use outside knowledge."
+            ),
+        ),
+        ("human", "Context:\n{context}\n\n Question: {question}"),
+    ]
+)
+
+
+def format_docs(docs: list[Document]) -> str:
+    """Join chunks into one text, each labeled with paper and page so the model can cite it"""
+    return "\n\n".join(
+        f"[{d.metadata['paper']},p.{d.metadata['page']}]\n{d.page_content}" for d in docs
+    )
+
+
+def build_rag_chain(
+    model: BaseChatModel, retriever: BaseRetriever, fallback: BaseChatModel | None = None
+) -> Runnable[str, dict[str, Any]]:
+    """question-> {"question,"docs"(retrieved chunks),"answer"(RAGAnswer)}."""
+    retrieve: Runnable[str, dict[str, Any]] = RunnableParallel(
+        docs=retriever, question=RunnablePassthrough()
+    )
+    answer = (
+        RunnablePassthrough.assign(context=lambda x: format_docs(x["docs"]))
+        | rag_prompt
+        | _structured(model, RagAnswer, fallback)
+    )
+    return retrieve | RunnablePassthrough.assign(answer=answer)

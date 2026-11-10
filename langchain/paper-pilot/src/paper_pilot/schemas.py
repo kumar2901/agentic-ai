@@ -21,3 +21,19 @@ class PaperSummary(BaseModel):
 
 class Keywords(BaseModel):
     keywords: list[str] = Field(description="5 short keys describing the paper.")
+
+
+class Source(BaseModel):
+    """Where a fact came from"""
+
+    paper: str = Field(description="Paper title exactly as written in the context labe")
+    page: int = Field(ge=1, description="Page number from the context label")
+
+
+class RagAnswer(BaseModel):
+    """An Answer grounded only in the retrieved paper chhunks."""
+
+    answer: str = Field(description='The answer, or "I don\'t know" if the context lacks it')
+    sources: list[Source] = Field(
+        description="Paper and page for every fact used; empty if unknown"
+    )
